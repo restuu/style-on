@@ -1,0 +1,73 @@
+<configuration>
+    <property name="LOGS" value="./logs" />
+    <property name="LOG_FILENAME" value="app" />
+
+    <appender
+            name="Console"
+            class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LoggingEventCompositeJsonEncoder">
+            <decorator class="net.logstash.logback.decorate.PrettyPrintingDecorator"/>
+            <providers>
+                <timestamp>
+                    <pattern>[ISO_LOCAL_DATE_TIME]</pattern>
+                    <timeZone>Asia/Jakarta</timeZone>
+                </timestamp>
+                <pattern>
+                    <omitEmptyFields>true</omitEmptyFields>
+                    <pattern>
+                        {
+                        "logger": "%logger{0}",
+                        "level": "%level",
+                        "thread": "%thread",
+                        "message": "#tryJson{%message}",
+                        "traceId": "%X{LOG_KEY}"
+                        }
+                    </pattern>
+                </pattern>
+                <stackTrace>
+                    <throwableConverter class="net.logstash.logback.stacktrace.ShortenedThrowableConverter">
+                        <maxDepthPerThrowable>30</maxDepthPerThrowable>
+                        <maxLength>2048</maxLength>
+                        <shortenedClassNameLength>20</shortenedClassNameLength>
+                        <exclude>^sun\.reflect\..*\.invoke</exclude>
+                        <exclude>^net\.sf\.cglib\.proxy\.MethodProxy\.invoke</exclude>
+                        <rootCauseFirst>true</rootCauseFirst>
+                    </throwableConverter>
+                </stackTrace>
+            </providers>
+        </encoder>
+    </appender>
+
+    <appender
+            name="RollingFile"
+            class="ch.qos.logback.core.FileAppender"
+    >
+        <file>${LOGS}/${LOG_FILENAME}.log</file>
+        <encoder
+                class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+            <pattern>%d{ISO8601, Asia/Jakarta} [%X{LOG_KEY}] %p %logger{0} [%t] %m%n</pattern>
+        </encoder>
+
+        <!-- deny all events with a level below INFO, that is TRACE and DEBUG -->
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>INFO</level>
+        </filter>
+
+    </appender>
+
+    <root level="info">
+        <appender-ref ref="RollingFile" />
+        <appender-ref ref="Console" />
+    </root>
+
+    <logger name="com.catalyst" level="debug" additivity="false">
+        <appender-ref ref="Console" />
+        <appender-ref ref="RollingFile" />
+    </logger>
+
+    <logger name="org.opencv" level="finest" additivity="false">
+        <appender-ref ref="Console" />
+        <appender-ref ref="RollingFile" />
+    </logger>
+
+</configuration>
