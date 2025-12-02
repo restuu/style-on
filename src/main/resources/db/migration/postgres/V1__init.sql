@@ -1,9 +1,10 @@
 CREATE TABLE IF NOT EXISTS style
 (
-	id        bigserial not null primary key,
-	name      text      not null,
-	image_url text      not null,
-	metadata  json      null
+	id bigserial not null primary key,
+	name varchar(50) not null,
+	image_url varchar(255) not null,
+	metadata  json null,
+	description varchar(255) null
 );
 
 CREATE TABLE IF NOT EXISTS tag
