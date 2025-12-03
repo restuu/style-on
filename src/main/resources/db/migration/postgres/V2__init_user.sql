@@ -1,11 +1,13 @@
 create table if not exists member
 (
-	id    bigserial    not null primary key,
-	name  varchar(255) not null,
-	email varchar(255) null
+	id     bigserial    not null primary key,
+	name   varchar(255) not null,
+	email  varchar(255) null,
+	gender varchar(10)  not null
 );
 
 create unique index if not exists uq_user_email on member (email);
+create index if not exists idx_user_gender on member (gender);
 
 create table if not exists member_style
 (

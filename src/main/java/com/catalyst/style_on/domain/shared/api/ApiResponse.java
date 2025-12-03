@@ -1,5 +1,7 @@
 package com.catalyst.style_on.domain.shared.api;
 
+import org.springframework.http.HttpStatus;
+
 public record ApiResponse<T>(boolean success, String message, T data) {
 
     public static final class Message {
@@ -13,5 +15,9 @@ public record ApiResponse<T>(boolean success, String message, T data) {
 
     public static ApiResponse<?> internalServerError() {
         return new ApiResponse<>(false, Message.INTERNAL_SERVER_ERROR, null);
+    }
+
+    public static  ApiResponse<Void> unauthenticated() {
+        return new ApiResponse<>(false, HttpStatus.UNAUTHORIZED.getReasonPhrase(), null);
     }
 }

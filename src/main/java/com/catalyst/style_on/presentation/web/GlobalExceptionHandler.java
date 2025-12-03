@@ -1,4 +1,4 @@
-package com.catalyst.style_on.domain.shared.handler;
+package com.catalyst.style_on.presentation.web;
 
 import com.catalyst.style_on.domain.shared.api.ApiResponse;
 import lombok.extern.slf4j.Slf4j;
