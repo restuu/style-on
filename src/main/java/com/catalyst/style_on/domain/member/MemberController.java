@@ -1,35 +1,32 @@
-package com.catalyst.style_on.domain.style;
+package com.catalyst.style_on.domain.member;
 
+import com.catalyst.style_on.domain.member.dto.MemberResponseDTO;
 import com.catalyst.style_on.domain.shared.api.ApiResponse;
-import com.catalyst.style_on.domain.style.dto.StyleResponseDTO;
+import com.catalyst.style_on.domain.shared.gender.Gender;
+import com.catalyst.style_on.util.SecurityUtils;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
-import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Mono;
-
-import java.util.List;
 
 import static com.catalyst.style_on.domain.shared.constant.SecurityConstant.JWT_BEARER_AUTH;
 
 @RestController
-@Slf4j
+@RequestMapping("/api/v1/members")
 @RequiredArgsConstructor
 @SecurityRequirement(name = JWT_BEARER_AUTH)
-@RequestMapping("/api/v1/styles")
-public class StyleController {
-    private final StyleService styleService;
+@Slf4j
+public class MemberController {
 
-    @GetMapping
-    public Mono<ApiResponse<List<StyleResponseDTO>>> findStyles(@NotNull @Valid @RequestParam String tag) {
-        return styleService.findStylesByTagName(tag)
-                .collectList()
+    private final MemberService memberService;
+
+    @GetMapping("/me")
+    public Mono<ApiResponse<MemberResponseDTO>> getCurrentMember() {
+        return SecurityUtils.getCurrentMemberId()
+                .flatMap(memberService::findById)
                 .map(ApiResponse::ok);
     }
-
 }

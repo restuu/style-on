@@ -1,5 +1,6 @@
 package com.catalyst.style_on.infrastructure.security.jwt;
 
+import com.catalyst.style_on.domain.auth.AuthCustomClaim;
 import com.catalyst.style_on.domain.auth.AuthTokenProvider;
 import com.catalyst.style_on.domain.auth.AuthClaim;
 import com.catalyst.style_on.domain.member.MemberService;
@@ -27,7 +28,7 @@ public class JwtService implements AuthTokenProvider {
     private final MemberService memberService;
 
     @Override
-    public Mono<String> generateToken(AuthClaim claim) {
+    public Mono<String> generateToken(AuthCustomClaim claim) {
         return Mono.create(sink -> {
             try {
                 sink.success(generateJwtToken(claim));
@@ -59,16 +60,16 @@ public class JwtService implements AuthTokenProvider {
     }
 
 
-    private String generateJwtToken(AuthClaim claim) {
+    private String generateJwtToken(AuthCustomClaim claim) {
         Instant now = Instant.now();
 
         return Jwts.builder()
                 .claims()
-                .subject(claim.getMemberId().toString())
+                .subject(claim.memberId().toString())
                 .and()
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plus(config.getExpiryTime())))
-                .signWith(getSigningKey(), Jwts.SIG.HS256)
+                .signWith(getSigningKey(), Jwts.SIG.HS512)
                 .compact();
     }
 

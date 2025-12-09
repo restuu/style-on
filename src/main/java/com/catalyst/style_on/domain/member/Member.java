@@ -1,5 +1,7 @@
 package com.catalyst.style_on.domain.member;
 
+import com.catalyst.style_on.domain.shared.gender.Gender;
+import jakarta.annotation.Generated;
 import jakarta.validation.constraints.Email;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.relational.core.mapping.Table;
@@ -10,6 +12,7 @@ public record Member(
         Long id,
         String name,
         @Email
-        String email
+        String email,
+        Gender gender
 ) {
 }

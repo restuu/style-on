@@ -19,20 +19,6 @@ import org.springframework.security.web.server.util.matcher.PathPatternParserSer
 public class SecurityConfig {
 
     @Bean
-    @Order(1) // This chain is checked first
-    SecurityWebFilterChain publicEndpointsSecurityFilterChain(ServerHttpSecurity http) {
-        return http
-                // This security chain only applies to the /scalar/** path
-                .securityMatcher(new PathPatternParserServerWebExchangeMatcher("/scalar/**"))
-                .authorizeExchange(exchange -> exchange
-                        // All requests to /scalar/** are permitted
-                        .anyExchange().permitAll()
-                )
-                .build();
-    }
-
-    @Bean
-    @Order(2) // This chain is checked second
     SecurityWebFilterChain apiSecurityFilterChain(
             ServerHttpSecurity http,
             ReactiveAuthenticationManager authenticationManager,
@@ -45,10 +31,18 @@ public class SecurityConfig {
 
         return http
                 // This security chain applies to all other paths, especially /api/**
-                .securityMatcher(new PathPatternParserServerWebExchangeMatcher("/api/**"))
                 .authorizeExchange(exchange -> exchange
+                        .matchers(new PathPatternParserServerWebExchangeMatcher("/scalar/**")).permitAll()
+                        .matchers(new PathPatternParserServerWebExchangeMatcher("/api-docs")).permitAll()
                         .pathMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
                         .pathMatchers(HttpMethod.POST, "/api/v1/auth/register").permitAll()
+                        // Permit all requests for static assets like favicons, manifests, and images
+                        .pathMatchers(
+                                "/favicon.ico",
+                                "/android-chrome-*.png",
+                                "/apple-touch-icon.png",
+                                "/site.webmanifest"
+                        ).permitAll()
                         // All other /api/** requests must be authenticated
                         .anyExchange().authenticated()
                 )

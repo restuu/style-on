@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 public record AuthRegisterRequestDTO(
+        @NotBlank String name,
         @NotBlank @Email String email,
         @NotNull Gender gender
 ) {

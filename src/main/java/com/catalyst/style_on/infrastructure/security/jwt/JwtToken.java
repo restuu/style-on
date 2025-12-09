@@ -19,8 +19,10 @@ public class JwtToken extends AbstractAuthenticationToken {
     }
 
     public Authentication withAuthenticated(boolean authenticated){
+        Authentication authentication = new JwtToken(token, principal);
+        authentication.setAuthenticated(authenticated);
 
-        return new JwtToken(token, principal);
+        return authentication;
     }
 
     @Override

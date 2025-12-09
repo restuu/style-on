@@ -23,7 +23,5 @@ public class OpenCVTestRunner implements CommandLineRunner {
         Mat mat = new Mat(5, 5, CvType.CV_8UC1);
 
         logger.info("OpenCV Mat created (5x5, 8-bit unsigned, 1 channel): {}", mat.dump());
-
-        System.out.println("OpenCV Version xxxxxx: " + Core.VERSION);
     }
 }

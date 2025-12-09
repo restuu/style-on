@@ -1,12 +1,14 @@
 package com.catalyst.style_on.domain.shared.gender;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonValue;
 
 public enum Gender {
     MALE,
     FEMALE;
 
     @Override
+    @JsonValue
     public String toString() {
         return switch (this) {
             case MALE -> "male";
