@@ -18,4 +18,10 @@ public class StyleServiceImpl implements  StyleService {
         return styleRepository.findByTagName(name)
                 .map(StyleMapper::styleToStyleResponseDTO);
     }
+
+    @Override
+    public Flux<StyleResponseDTO> findAllStyles() {
+        return styleRepository.findAll()
+                .map(StyleMapper::styleToStyleResponseDTO);
+    }
 }

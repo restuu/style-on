@@ -6,6 +6,7 @@ create table member_style
 	id         bigserial    not null primary key,
 	member_id  bigint       not null references member (id) on update cascade on delete cascade,
 	name       varchar(100) not null,
+	summary    jsonb        not null,
 	created_at timestamptz  not null default current_timestamp,
 	updated_at timestamptz  not null default current_timestamp
 );

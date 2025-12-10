@@ -9,6 +9,7 @@ create table if not exists member
 create unique index if not exists uq_user_email on member (email);
 create index if not exists idx_user_gender on member (gender);
 
+drop table if exists member_style cascade ;
 create table if not exists member_style
 (
 	id        bigserial not null primary key,

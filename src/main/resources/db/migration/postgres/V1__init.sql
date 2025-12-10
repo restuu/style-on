@@ -1,10 +1,15 @@
+DROP TABLE IF EXISTS style CASCADE;
 CREATE TABLE IF NOT EXISTS style
 (
-	id bigserial not null primary key,
-	name varchar(50) not null,
-	image_url varchar(255) not null,
-	metadata  json null,
-	description varchar(255) null
+	id             bigserial     not null primary key,
+	name           varchar(100)  not null,
+	image_url      varchar(255)  not null,
+	key_style      varchar(50)[] null,
+	movement       varchar(50)   null,
+	strap_material varchar(50)   null,
+	colors         varchar(50)[] null,
+	price          varchar(50)   null,
+	note           text          not null
 );
 
 CREATE TABLE IF NOT EXISTS tag

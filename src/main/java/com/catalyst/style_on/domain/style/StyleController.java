@@ -26,8 +26,8 @@ public class StyleController {
     private final StyleService styleService;
 
     @GetMapping
-    public Mono<ApiResponse<List<StyleResponseDTO>>> findStyles(@NotNull @Valid @RequestParam String tag) {
-        return styleService.findStylesByTagName(tag)
+    public Mono<ApiResponse<List<StyleResponseDTO>>> findStyles() {
+        return styleService.findAllStyles()
                 .collectList()
                 .map(ApiResponse::ok);
     }

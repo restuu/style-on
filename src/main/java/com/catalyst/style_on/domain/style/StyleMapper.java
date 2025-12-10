@@ -8,7 +8,7 @@ public class StyleMapper {
                 style.id(),
                 style.name(),
                 style.imageUrl(),
-                style.metadata()
+                style.note()
         );
     }
 }

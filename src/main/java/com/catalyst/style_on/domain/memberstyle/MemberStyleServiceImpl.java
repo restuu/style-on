@@ -39,6 +39,7 @@ public class MemberStyleServiceImpl implements MemberStyleService {
                 null,
                 memberId,
                 styleName,
+                null,
                 now,
                 now,
                 items
