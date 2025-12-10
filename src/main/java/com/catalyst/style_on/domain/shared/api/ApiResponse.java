@@ -19,6 +19,10 @@ public record ApiResponse<T>(boolean success, String message, T data) {
         return new ApiResponse<>(false, Message.INTERNAL_SERVER_ERROR, null);
     }
 
+    public static ApiResponse<?> internalServerError(String message) {
+        return new ApiResponse<>(false, message, null);
+    }
+
     public static ApiResponse<?> notFound() {
         return new ApiResponse<>(false, Message.NOT_FOUND, null);
     }

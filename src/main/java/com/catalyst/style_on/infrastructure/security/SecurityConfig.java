@@ -30,7 +30,6 @@ public class SecurityConfig {
         authenticationWebFilter.setServerAuthenticationConverter(authenticationConverter);
 
         return http
-                // This security chain applies to all other paths, especially /api/**
                 .authorizeExchange(exchange -> exchange
                         .matchers(new PathPatternParserServerWebExchangeMatcher("/scalar/**")).permitAll()
                         .matchers(new PathPatternParserServerWebExchangeMatcher("/api-docs")).permitAll()

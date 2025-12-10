@@ -25,7 +25,7 @@ public class GlobalExceptionHandler {
 
         log.error("Internal Server Error", ex);
 
-        ApiResponse<?> response = ApiResponse.internalServerError();
+        ApiResponse<?> response = ApiResponse.internalServerError(ex.getMessage());
         return ResponseEntity.internalServerError().body(response);
     }
 }
