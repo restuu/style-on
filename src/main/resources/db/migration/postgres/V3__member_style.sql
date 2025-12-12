@@ -11,7 +11,7 @@ create table member_style
 	updated_at timestamptz  not null default current_timestamp
 );
 
-create unique index uq_member_style_member_id_name on member_style (member_id, name);
+create index idx_member_style_name_gin on member_style using gin (name gin_trgm_ops);
 
 
 create table member_style_item

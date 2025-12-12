@@ -1,4 +1,4 @@
-package com.catalyst.style_on.domain.memberstyle;
+package com.catalyst.style_on.domain.memberstyle.entity;
 
 import org.springframework.data.annotation.Id;
 import org.springframework.data.relational.core.mapping.MappedCollection;
@@ -15,8 +15,6 @@ public record MemberStyle(
         String name,
         Map<String, Object> summary,
         ZonedDateTime createdAt,
-        ZonedDateTime updatedAt,
-        @MappedCollection(idColumn = "member_style_id")
-        Set<MemberStyleItem> items
+        ZonedDateTime updatedAt
 ) {
 }

@@ -1,4 +1,4 @@
-package com.catalyst.style_on.domain.memberstyle;
+package com.catalyst.style_on.domain.memberstyle.entity;
 
 import org.springframework.data.annotation.Id;
 import org.springframework.data.relational.core.mapping.Table;

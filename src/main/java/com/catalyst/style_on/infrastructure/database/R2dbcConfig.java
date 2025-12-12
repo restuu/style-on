@@ -1,5 +1,7 @@
 package com.catalyst.style_on.infrastructure.database;
 
+import com.catalyst.style_on.infrastructure.database.converter.JsonToMapConverter;
+import com.catalyst.style_on.infrastructure.database.converter.MapToJsonConverter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.r2dbc.spi.ConnectionFactory;
 import lombok.RequiredArgsConstructor;
@@ -27,7 +29,9 @@ public class R2dbcConfig extends AbstractR2dbcConfiguration {
     @Bean
     @Override
     public R2dbcCustomConversions r2dbcCustomConversions() {
-        List<Converter<?, ?>> converters = new ArrayList<>();
+        List<Object> converters = new ArrayList<>();
+        converters.add(new JsonToMapConverter(objectMapper));
+        converters.add(new MapToJsonConverter(objectMapper));
 
         return new R2dbcCustomConversions(getStoreConversions(), converters);
     }

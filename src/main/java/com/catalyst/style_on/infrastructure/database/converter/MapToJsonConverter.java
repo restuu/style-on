@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.r2dbc.postgresql.codec.Json;
 import java.util.Collections;
+import java.util.Map;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.convert.TypeDescriptor;
@@ -12,13 +13,13 @@ import org.springframework.data.convert.WritingConverter;
 
 @WritingConverter
 @RequiredArgsConstructor
-public class ObjectToJsonConverter implements GenericConverter {
+public class MapToJsonConverter implements GenericConverter {
 
     private final ObjectMapper objectMapper;
 
     @Override
     public Set<ConvertiblePair> getConvertibleTypes() {
-        return Collections.singleton(new ConvertiblePair(Object.class, Json.class));
+        return Collections.singleton(new ConvertiblePair(Map.class, Json.class));
     }
 
     @Override
