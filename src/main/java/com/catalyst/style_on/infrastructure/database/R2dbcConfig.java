@@ -1,15 +1,17 @@
 package com.catalyst.style_on.infrastructure.database;
 
 import com.catalyst.style_on.infrastructure.database.converter.JsonToMapConverter;
+import com.catalyst.style_on.infrastructure.database.converter.JsonToMemberStyleSummaryDTOConverter;
 import com.catalyst.style_on.infrastructure.database.converter.MapToJsonConverter;
+import com.catalyst.style_on.infrastructure.database.converter.MemberStyleSummaryDTOToJsonConverter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.r2dbc.spi.ConnectionFactory;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.convert.converter.Converter;
 import org.springframework.data.r2dbc.config.AbstractR2dbcConfiguration;
 import org.springframework.data.r2dbc.convert.R2dbcCustomConversions;
+import org.springframework.lang.NonNull;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -22,16 +24,20 @@ public class R2dbcConfig extends AbstractR2dbcConfiguration {
     private final ObjectMapper objectMapper;
 
     @Override
+    @NonNull
     public ConnectionFactory connectionFactory() {
         return connectionFactory;
     }
 
     @Bean
     @Override
+    @NonNull
     public R2dbcCustomConversions r2dbcCustomConversions() {
         List<Object> converters = new ArrayList<>();
         converters.add(new JsonToMapConverter(objectMapper));
         converters.add(new MapToJsonConverter(objectMapper));
+        converters.add(new MemberStyleSummaryDTOToJsonConverter(objectMapper));
+        converters.add(new JsonToMemberStyleSummaryDTOConverter(objectMapper));
 
         return new R2dbcCustomConversions(getStoreConversions(), converters);
     }

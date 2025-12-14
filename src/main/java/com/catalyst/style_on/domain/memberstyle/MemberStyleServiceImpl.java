@@ -2,8 +2,11 @@ package com.catalyst.style_on.domain.memberstyle;
 
 import com.catalyst.style_on.domain.memberstyle.dto.MemberStyleResponseDTO;
 import com.catalyst.style_on.domain.memberstyle.dto.MemberStyleSubmitRequestDTO;
+import com.catalyst.style_on.domain.memberstyle.dto.MemberStyleSummaryDTO;
 import com.catalyst.style_on.domain.memberstyle.entity.MemberStyle;
 import com.catalyst.style_on.domain.memberstyle.entity.MemberStyleItem;
+import com.catalyst.style_on.domain.productindex.ProductIndexService;
+import com.catalyst.style_on.domain.productindex.dto.ProductIndexSearchParamsDTO;
 import com.catalyst.style_on.domain.style.StyleRepository;
 import com.catalyst.style_on.domain.style.enumeration.*;
 import lombok.RequiredArgsConstructor;
@@ -28,6 +31,7 @@ public class MemberStyleServiceImpl implements MemberStyleService {
     private final MemberStyleRepository memberStyleRepository;
     private final MemberStyleItemRepository memberStyleItemRepository;
     private final StyleRepository styleRepository;
+    private final ProductIndexService productIndexService;
 
     @Override
     @Transactional
@@ -49,20 +53,13 @@ public class MemberStyleServiceImpl implements MemberStyleService {
                         priceCount.merge(style.price(), 1, Integer::sum);
                     });
 
-                    log.debug("key count: {}", keyStyleCount);
-                    log.debug("movement count: {}", movementCount);
-                    log.debug("strap material count: {}", strapMaterialCount);
-                    log.debug("color count: {}", colorCount);
-                    log.debug("price count: {}", priceCount);
-
-                    Map<String, Object> summary = Map.of(
-                            "key_style", keyStyleCount,
-                            "movement", movementCount,
-                            "strap_material", strapMaterialCount,
-                            "color", colorCount,
-                            "price", priceCount
-                    );
-
+                    MemberStyleSummaryDTO summary = MemberStyleSummaryDTO.builder()
+                            .movement(movementCount)
+                            .keyStyle(keyStyleCount)
+                            .strapMaterial(strapMaterialCount)
+                            .color(colorCount)
+                            .price(priceCount)
+                            .build();
 
                     // TODO: Implement logic to determine the final style name based on counts
                     String determinedStyleName = "Top Style"; // Placeholder
@@ -72,8 +69,6 @@ public class MemberStyleServiceImpl implements MemberStyleService {
                 .flatMap(processed -> {
                     ZonedDateTime now = ZonedDateTime.now();
 
-                    // 1. Create the parent MemberStyle with its items set to null.
-                    // It cannot be saved with new children attached.
                     MemberStyle memberStyle = new MemberStyle(
                             null,
                             memberId,
@@ -83,12 +78,9 @@ public class MemberStyleServiceImpl implements MemberStyleService {
                             now
                     );
 
-                    // 2. Save the parent entity first to generate its ID.
                     return memberStyleRepository.save(memberStyle);
                 })
                 .flatMap(savedMemberStyle -> {
-                    // 3. Now that the parent has an ID, create the child items.
-                    // The framework will use the parent's ID to set the foreign key.
                     Set<MemberStyleItem> items = req.styleIds().stream()
                             .map(styleId -> new MemberStyleItem(null,
                                     savedMemberStyle.id(),
@@ -98,6 +90,16 @@ public class MemberStyleServiceImpl implements MemberStyleService {
                             .collect(Collectors.toSet());
 
                     return memberStyleItemRepository.saveAll(items)
+                            .then(Mono.just(savedMemberStyle));
+                })
+                .flatMap(savedMemberStyle -> {
+                    ProductIndexSearchParamsDTO searchParams = MemberStyleMapper
+                            .memberStyleSummaryDTOToProductIndexSearchParamsDTO(savedMemberStyle.summary());
+
+                    return productIndexService.searchProducts(searchParams)
+                            .doOnNext(productIndex -> {
+                                log.info("ProductIndex: {}", productIndex);
+                            })
                             .then(Mono.just(savedMemberStyle));
                 })
                 .map(saved -> new MemberStyleResponseDTO(saved.id(), saved.name()));

@@ -1,5 +1,6 @@
 package com.catalyst.style_on.domain.memberstyle.entity;
 
+import com.catalyst.style_on.domain.memberstyle.dto.MemberStyleSummaryDTO;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.relational.core.mapping.MappedCollection;
 import org.springframework.data.relational.core.mapping.Table;
@@ -13,7 +14,7 @@ public record MemberStyle(
         @Id Long id,
         Long memberId,
         String name,
-        Map<String, Object> summary,
+        MemberStyleSummaryDTO summary,
         ZonedDateTime createdAt,
         ZonedDateTime updatedAt
 ) {
