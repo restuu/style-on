@@ -92,13 +92,14 @@ public class MemberStyleServiceImpl implements MemberStyleService {
                     return memberStyleItemRepository.saveAll(items)
                             .then(Mono.just(savedMemberStyle));
                 })
-                .flatMap(savedMemberStyle -> {
+                .zipWhen(savedMemberStyle -> {
+
                     ProductIndexSearchParamsDTO searchParams = MemberStyleMapper
                             .memberStyleSummaryDTOToProductIndexSearchParamsDTO(savedMemberStyle.summary());
 
                     return productIndexService.searchProducts(searchParams)
                             .collectList()
-                            .flatMapMany(productIndices -> {
+                            .flatMap(productIndices -> {
                                 List<MemberStyleProduct> memberStyleProducts = new ArrayList<>();
 
                                 for (int i = 0; i < productIndices.size(); i++) {
@@ -112,11 +113,37 @@ public class MemberStyleServiceImpl implements MemberStyleService {
                                     );
                                     memberStyleProducts.add(memberStyleProduct);
                                 }
-                                return memberStyleProductRepository.saveAll(memberStyleProducts);
-                            })
-                            .then(Mono.just(savedMemberStyle));
-                })
-                .map(saved -> new MemberStyleResponseDTO(saved.id(), saved.name()));
+                                return memberStyleProductRepository.saveAll(memberStyleProducts)
+                                        .then(Mono.just(productIndices));
+                            });
 
+                })
+                .map(tuple2 -> {
+                    MemberStyle memberStyle = tuple2.getT1();
+                    List<ProductIndex> productIndices = tuple2.getT2();
+
+                    List<MemberStyleResponseDTO.Product> products = new ArrayList<>();
+                    for (ProductIndex productIndex : productIndices) {
+                        MemberStyleResponseDTO.Product product = new MemberStyleResponseDTO.Product(
+                                productIndex.sku(),
+                                buildProductImageUrl(productIndex)
+                                );
+
+                        products.add(product);
+                    }
+
+                    return new MemberStyleResponseDTO(memberStyle.id(), memberStyle.name(), products);
+                });
+
+    }
+
+    private String buildProductImageUrl(ProductIndex productIndex) {
+        String host = "https://assetsnew.machtwatch.net";
+
+        return host +
+                "/images/product/" +
+                productIndex.brandCode() +
+                "/" +
+                productIndex.images().jpg();
     }
 }

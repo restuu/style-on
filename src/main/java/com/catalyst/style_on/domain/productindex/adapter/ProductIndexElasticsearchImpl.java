@@ -60,7 +60,14 @@ public class ProductIndexElasticsearchImpl implements ProductIndexService {
         return Mono.<SearchResponse>create(sink -> {
                     SearchSourceBuilder searchSource = buildSearchSource(params);
 
-                    String[] includeFields = List.of("sku", "name").toArray(String[]::new);
+                    String[] includeFields = List
+                            .of(
+                                    "sku",
+                                    "name",
+                                    "images",
+                                    "brand_code"
+                            )
+                            .toArray(String[]::new);
                     searchSource.fetchSource(includeFields, null);
                     searchSource.from(0);
                     searchSource.size(5);
