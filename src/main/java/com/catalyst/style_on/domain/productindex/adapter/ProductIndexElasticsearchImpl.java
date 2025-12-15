@@ -121,7 +121,6 @@ public class ProductIndexElasticsearchImpl implements ProductIndexService {
                 .boostMode(CombineFunction.REPLACE);
         // .boostMode(CombineFunction.MAX);
 
-
         searchSourceBuilder.query(functionScoreQueryBuilder);
 
         return searchSourceBuilder;

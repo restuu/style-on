@@ -5,6 +5,8 @@ import com.catalyst.style_on.domain.memberstyle.dto.MemberStyleSubmitRequestDTO;
 import com.catalyst.style_on.domain.memberstyle.dto.MemberStyleSummaryDTO;
 import com.catalyst.style_on.domain.memberstyle.entity.MemberStyle;
 import com.catalyst.style_on.domain.memberstyle.entity.MemberStyleItem;
+import com.catalyst.style_on.domain.memberstyle.entity.MemberStyleProduct;
+import com.catalyst.style_on.domain.productindex.ProductIndex;
 import com.catalyst.style_on.domain.productindex.ProductIndexService;
 import com.catalyst.style_on.domain.productindex.dto.ProductIndexSearchParamsDTO;
 import com.catalyst.style_on.domain.style.StyleRepository;
@@ -17,10 +19,7 @@ import reactor.core.publisher.Mono;
 import reactor.util.function.Tuples;
 
 import java.time.ZonedDateTime;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -30,6 +29,7 @@ public class MemberStyleServiceImpl implements MemberStyleService {
 
     private final MemberStyleRepository memberStyleRepository;
     private final MemberStyleItemRepository memberStyleItemRepository;
+    private final MemberStyleProductRepository memberStyleProductRepository;
     private final StyleRepository styleRepository;
     private final ProductIndexService productIndexService;
 
@@ -97,8 +97,22 @@ public class MemberStyleServiceImpl implements MemberStyleService {
                             .memberStyleSummaryDTOToProductIndexSearchParamsDTO(savedMemberStyle.summary());
 
                     return productIndexService.searchProducts(searchParams)
-                            .doOnNext(productIndex -> {
-                                log.info("ProductIndex: {}", productIndex);
+                            .collectList()
+                            .flatMapMany(productIndices -> {
+                                List<MemberStyleProduct> memberStyleProducts = new ArrayList<>();
+
+                                for (int i = 0; i < productIndices.size(); i++) {
+                                    ProductIndex productIndex = productIndices.get(i);
+
+                                    MemberStyleProduct memberStyleProduct = new MemberStyleProduct(
+                                            null,
+                                            savedMemberStyle.id(),
+                                            productIndex.sku(),
+                                            i
+                                    );
+                                    memberStyleProducts.add(memberStyleProduct);
+                                }
+                                return memberStyleProductRepository.saveAll(memberStyleProducts);
                             })
                             .then(Mono.just(savedMemberStyle));
                 })
