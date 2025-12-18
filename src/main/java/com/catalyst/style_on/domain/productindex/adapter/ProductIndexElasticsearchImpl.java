@@ -3,8 +3,10 @@ package com.catalyst.style_on.domain.productindex.adapter;
 import com.catalyst.style_on.domain.productindex.ProductIndex;
 import com.catalyst.style_on.domain.productindex.ProductIndexService;
 import com.catalyst.style_on.domain.productindex.dto.ProductIndexSearchParamsDTO;
+import com.catalyst.style_on.domain.shared.json.JsonUtils;
 import com.catalyst.style_on.domain.shared.price.Price;
 import com.catalyst.style_on.exception.InternalServerError;
+import com.catalyst.style_on.exception.NotFoundException;
 import com.catalyst.style_on.infrastructure.elasticsearch.ElasticsearchConfig;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -16,6 +18,7 @@ import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestHighLevelClient;
 import org.elasticsearch.common.lucene.search.function.CombineFunction;
 import org.elasticsearch.common.lucene.search.function.FunctionScoreQuery;
+import org.elasticsearch.common.util.iterable.Iterables;
 import org.elasticsearch.index.query.BoolQueryBuilder;
 import org.elasticsearch.index.query.QueryBuilder;
 import org.elasticsearch.index.query.QueryBuilders;
@@ -27,6 +30,7 @@ import static org.elasticsearch.index.query.functionscore.FunctionScoreQueryBuil
 import org.elasticsearch.index.query.functionscore.ScoreFunctionBuilders;
 import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.search.SearchHit;
+import org.elasticsearch.search.SearchHits;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
@@ -48,6 +52,13 @@ public class ProductIndexElasticsearchImpl implements ProductIndexService {
     private static final String STRAP_MATERIAL_FIELD = "strap.keyword";
     private static final String COLOR_FIELD = "color.keyword";
 
+    private static final String[] SOURCE_INCLUDE_FIELDS = List.of(
+            "sku",
+            "name",
+            "images",
+            "brand_code"
+    ).toArray(String[]::new);
+
     private final ElasticsearchConfig cfg;
     private final RestHighLevelClient client;
     private final ObjectMapper objectMapper;
@@ -60,15 +71,7 @@ public class ProductIndexElasticsearchImpl implements ProductIndexService {
         return Mono.<SearchResponse>create(sink -> {
                     SearchSourceBuilder searchSource = buildSearchSource(params);
 
-                    String[] includeFields = List
-                            .of(
-                                    "sku",
-                                    "name",
-                                    "images",
-                                    "brand_code"
-                            )
-                            .toArray(String[]::new);
-                    searchSource.fetchSource(includeFields, null);
+                    searchSource.fetchSource(SOURCE_INCLUDE_FIELDS, null);
                     searchSource.from(0);
                     searchSource.size(5);
 
@@ -104,6 +107,32 @@ public class ProductIndexElasticsearchImpl implements ProductIndexService {
 
                     return productIndexes;
                 });
+    }
+
+    @Override
+    public Mono<ProductIndex> findBySku(String sku) {
+        return Mono.<SearchResponse>create(sink -> {
+
+                    BoolQueryBuilder queryBuilder = QueryBuilders.boolQuery();
+                    queryBuilder.filter(QueryBuilders.termQuery("sku.keyword", sku));
+
+                    SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+                    searchSourceBuilder.query(queryBuilder);
+                    searchSourceBuilder.size(1);
+
+                    SearchRequest searchRequest = new SearchRequest();
+                    searchRequest.source(searchSourceBuilder);
+
+                    try {
+                        SearchResponse response = client.search(searchRequest, RequestOptions.DEFAULT);
+                        sink.success(response);
+                    } catch (IOException e) {
+                        sink.error(e);
+                    }
+                })
+                .map(this::getHits)
+                .map(searchHits -> searchHits.getAt(0))
+                .map(hit -> JsonUtils.deserialize(hit.getSourceAsString(), ProductIndex.class));
     }
 
     private SearchSourceBuilder buildSearchSource(ProductIndexSearchParamsDTO params) {
@@ -204,6 +233,22 @@ public class ProductIndexElasticsearchImpl implements ProductIndexService {
                     return new FilterFunctionBuilder(range, ScoreFunctionBuilders.weightFactorFunction(weight));
                 })
                 .collect(Collectors.toList());
+    }
+
+    private SearchHits getHits(SearchResponse searchResponse) {
+        if (!RestStatus.OK.equals(searchResponse.status())) {
+            String builder = "Error searching products: " +
+                    searchResponse.status().toString();
+
+            throw new InternalServerError(builder);
+        }
+
+
+        if (searchResponse.getHits() == null || Iterables.size(searchResponse.getHits()) < 1) {
+            throw new NotFoundException("No products found");
+        }
+
+        return searchResponse.getHits();
     }
 
 }

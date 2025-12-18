@@ -27,6 +27,10 @@ public record ApiResponse<T>(boolean success, String message, T data) {
         return new ApiResponse<>(false, Message.NOT_FOUND, null);
     }
 
+    public static ApiResponse<?> notFound(String message) {
+        return new ApiResponse<>(false, Message.NOT_FOUND+": "+message, null);
+    }
+
     public static ApiResponse<?> badRequest(String message) {
         return new ApiResponse<>(false, message, null);
     }

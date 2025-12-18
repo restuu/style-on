@@ -1,5 +1,7 @@
 package com.catalyst.style_on.domain.memberstyle;
 
+import com.catalyst.style_on.domain.ai.AIModel;
+import com.catalyst.style_on.domain.memberstyle.dto.MemberStyleImagineStyleDTO;
 import com.catalyst.style_on.domain.memberstyle.dto.MemberStyleResponseDTO;
 import com.catalyst.style_on.domain.memberstyle.dto.MemberStyleSubmitRequestDTO;
 import com.catalyst.style_on.domain.memberstyle.dto.MemberStyleSummaryDTO;
@@ -9,15 +11,22 @@ import com.catalyst.style_on.domain.memberstyle.entity.MemberStyleProduct;
 import com.catalyst.style_on.domain.productindex.ProductIndex;
 import com.catalyst.style_on.domain.productindex.ProductIndexService;
 import com.catalyst.style_on.domain.productindex.dto.ProductIndexSearchParamsDTO;
+import com.catalyst.style_on.domain.style.Style;
 import com.catalyst.style_on.domain.style.StyleRepository;
 import com.catalyst.style_on.domain.style.enumeration.*;
+import com.catalyst.style_on.exception.NotFoundException;
+import com.google.common.collect.ImmutableList;
+import com.google.genai.Client;
+import com.google.genai.types.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Mono;
 import reactor.util.function.Tuples;
 
+import java.text.MessageFormat;
 import java.time.ZonedDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -32,48 +41,23 @@ public class MemberStyleServiceImpl implements MemberStyleService {
     private final MemberStyleProductRepository memberStyleProductRepository;
     private final StyleRepository styleRepository;
     private final ProductIndexService productIndexService;
+    private final Client genAi;
 
     @Override
     @Transactional
     public Mono<MemberStyleResponseDTO> submitMemberStyle(Long memberId, MemberStyleSubmitRequestDTO req) {
         return styleRepository.findAllById(req.styleIds())
                 .collectList()
-                .map(styles -> {
-                    Map<StyleEnum, Integer> keyStyleCount = new HashMap<>();
-                    Map<StyleMovementEnum, Integer> movementCount = new HashMap<>();
-                    Map<StyleStrapMaterialEnum, Integer> strapMaterialCount = new HashMap<>();
-                    Map<StyleColorEnum, Integer> colorCount = new HashMap<>();
-                    Map<StylePriceEnum, Integer> priceCount = new HashMap<>();
-
-                    styles.forEach(style -> {
-                        Arrays.stream(style.keyStyle()).forEach(key -> keyStyleCount.merge(key, 1, Integer::sum));
-                        movementCount.merge(style.movement(), 1, Integer::sum);
-                        strapMaterialCount.merge(style.strapMaterial(), 1, Integer::sum);
-                        Arrays.stream(style.colors()).forEach(color -> colorCount.merge(color, 1, Integer::sum));
-                        priceCount.merge(style.price(), 1, Integer::sum);
-                    });
-
-                    MemberStyleSummaryDTO summary = MemberStyleSummaryDTO.builder()
-                            .movement(movementCount)
-                            .keyStyle(keyStyleCount)
-                            .strapMaterial(strapMaterialCount)
-                            .color(colorCount)
-                            .price(priceCount)
-                            .build();
-
-                    // TODO: Implement logic to determine the final style name based on counts
-                    String determinedStyleName = "Top Style"; // Placeholder
-
-                    return Tuples.of(determinedStyleName, summary);
-                })
+                .map(this::summarizeSelectedStyles)
+                .zipWhen(this::generateStyleName)
                 .flatMap(processed -> {
                     ZonedDateTime now = ZonedDateTime.now();
 
                     MemberStyle memberStyle = new MemberStyle(
                             null,
                             memberId,
-                            processed.getT1(),
                             processed.getT2(),
+                            processed.getT1(),
                             now,
                             now
                     );
@@ -127,7 +111,7 @@ public class MemberStyleServiceImpl implements MemberStyleService {
                         MemberStyleResponseDTO.Product product = new MemberStyleResponseDTO.Product(
                                 productIndex.sku(),
                                 buildProductImageUrl(productIndex)
-                                );
+                        );
 
                         products.add(product);
                     }
@@ -135,6 +119,79 @@ public class MemberStyleServiceImpl implements MemberStyleService {
                     return new MemberStyleResponseDTO(memberStyle.id(), memberStyle.name(), products);
                 });
 
+    }
+
+    @Override
+    public Mono<ByteArrayResource> imagineMemberStyle(MemberStyleImagineStyleDTO params) {
+
+        return productIndexService.findBySku(params.modelNumber())
+                .map(productIndex -> {
+                    String prompt = "Make attached image wear item from this image "
+                            +buildProductImageUrl(productIndex)
+                            + ", return JPEG file";
+
+                    GenerateContentConfig config = GenerateContentConfig.builder()
+                            .responseModalities("TEXT", "IMAGE")
+                            .build();
+
+                    byte[] imageBytes = new byte[params.image().readableByteCount()];
+                    params.image().read(imageBytes);
+
+                    GenerateContentResponse response = genAi.models.generateContent(
+                            "gemini-2.5-flash-image",
+                            Content.fromParts(
+                                    Part.fromText(prompt),
+                                    Part.fromBytes(imageBytes,"image/jpeg")),
+                            config);
+
+                    ImmutableList<Part> parts = response.parts();
+                    if (parts == null) {
+                        log.error("Edit image returns null");
+                        throw new RuntimeException("Failed to generate image");
+                    }
+
+                    byte[] generatedImage = null;
+                    for (Part part : parts) {
+                        if (part.inlineData().isPresent()) {
+                            var blob = part.inlineData().get();
+                            if (blob.data().isPresent()) {
+                                generatedImage = blob.data().get();
+                                break;
+                            }
+                        }
+                    }
+
+                    if (generatedImage == null) {
+                        log.error("Generated image return no image");
+                        throw  new RuntimeException("Failed to generate image");
+                    }
+
+                    return new ByteArrayResource(generatedImage);
+                });
+    }
+
+    private MemberStyleSummaryDTO summarizeSelectedStyles(List<Style> styles) {
+        Map<StyleEnum, Integer> keyStyleCount = new HashMap<>();
+        Map<StyleMovementEnum, Integer> movementCount = new HashMap<>();
+        Map<StyleStrapMaterialEnum, Integer> strapMaterialCount = new HashMap<>();
+        Map<StyleColorEnum, Integer> colorCount = new HashMap<>();
+        Map<StylePriceEnum, Integer> priceCount = new HashMap<>();
+
+        styles.forEach(style -> {
+            Arrays.stream(style.keyStyle()).forEach(key -> keyStyleCount.merge(key, 1, Integer::sum));
+            movementCount.merge(style.movement(), 1, Integer::sum);
+            strapMaterialCount.merge(style.strapMaterial(), 1, Integer::sum);
+            Arrays.stream(style.colors()).forEach(color -> colorCount.merge(color, 1, Integer::sum));
+            priceCount.merge(style.price(), 1, Integer::sum);
+        });
+
+        return MemberStyleSummaryDTO.builder()
+                .movement(movementCount)
+                .keyStyle(keyStyleCount)
+                .strapMaterial(strapMaterialCount)
+                .color(colorCount)
+                .price(priceCount)
+                .build();
     }
 
     private String buildProductImageUrl(ProductIndex productIndex) {
@@ -145,5 +202,19 @@ public class MemberStyleServiceImpl implements MemberStyleService {
                 productIndex.brandCode() +
                 "/" +
                 productIndex.images().jpg();
+    }
+
+    private Mono<String> generateStyleName(MemberStyleSummaryDTO summary) {
+        return Mono.create(sink -> {
+            String prompt = """
+                    with examples such as "The Smart Casual" or "The Tech Avant-Garde",
+                    and maximum 30 chars,
+                    please create style name from this weighted parameter:
+                    """ + summary.toString();
+            String name = genAi.models.generateContent(AIModel.GEMINI_2_5_FLASH, prompt, null).text();
+
+            sink.success(name);
+        });
+
     }
 }
