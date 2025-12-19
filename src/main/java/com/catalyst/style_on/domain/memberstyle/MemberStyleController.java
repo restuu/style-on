@@ -40,7 +40,9 @@ public class MemberStyleController {
                 .map(ApiResponse::ok);
     }
 
-    @PutMapping(path = "/{member_style_id}/imagine", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PutMapping(path = "/{member_style_id}/imagine",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE,
+            produces = MediaType.IMAGE_JPEG_VALUE)
     public Mono<ResponseEntity<Resource>> submitImagineImage(@PathVariable("member_style_id") Long memberStyleId,
                                                              @RequestPart("image") Mono<FilePart> image,
                                                              @RequestPart("model_number") String modelNumber) {

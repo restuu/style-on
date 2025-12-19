@@ -1,11 +1,18 @@
 package com.catalyst.style_on.domain.style.dto;
 
-import org.springframework.data.annotation.Id;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.Setter;
+import lombok.experimental.Accessors;
 
-public record StyleResponseDTO(
-        @Id Long id,
-        String name,
-        String imageUrl,
-        String note
-) { }
+@Data
+@AllArgsConstructor
+@Setter
+@Accessors(chain = true)
+public class StyleResponseDTO{
+    private Long id;
+    private String name;
+    private String imageUrl;
+    private String note;
+}
 

@@ -8,8 +8,6 @@ import com.catalyst.style_on.domain.shared.price.Price;
 import com.catalyst.style_on.exception.InternalServerError;
 import com.catalyst.style_on.exception.NotFoundException;
 import com.catalyst.style_on.infrastructure.elasticsearch.ElasticsearchConfig;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.elasticsearch.action.search.SearchRequest;
@@ -18,7 +16,6 @@ import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestHighLevelClient;
 import org.elasticsearch.common.lucene.search.function.CombineFunction;
 import org.elasticsearch.common.lucene.search.function.FunctionScoreQuery;
-import org.elasticsearch.common.util.iterable.Iterables;
 import org.elasticsearch.index.query.BoolQueryBuilder;
 import org.elasticsearch.index.query.QueryBuilder;
 import org.elasticsearch.index.query.QueryBuilders;
@@ -35,9 +32,10 @@ import org.elasticsearch.search.builder.SearchSourceBuilder;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
-import java.io.IOException;
 import java.math.BigDecimal;
+import java.util.Arrays;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -61,78 +59,58 @@ public class ProductIndexElasticsearchImpl implements ProductIndexService {
 
     private final ElasticsearchConfig cfg;
     private final RestHighLevelClient client;
-    private final ObjectMapper objectMapper;
 
 
     @Override
     public Flux<ProductIndex> searchProducts(ProductIndexSearchParamsDTO params) {
         log.info("Elastic config: {}", cfg);
 
-        return Mono.<SearchResponse>create(sink -> {
+        return Mono.fromCallable(() -> {
                     SearchSourceBuilder searchSource = buildSearchSource(params);
 
                     searchSource.fetchSource(SOURCE_INCLUDE_FIELDS, null);
                     searchSource.from(0);
                     searchSource.size(5);
 
-                    SearchRequest searchRequest = new SearchRequest();
-                    searchRequest.indices(cfg.getIndexProduct());
+                    SearchRequest searchRequest = new SearchRequest(cfg.getIndexProduct());
                     searchRequest.source(searchSource);
 
                     log.info("Search: {}", searchRequest);
 
-                    try {
-                        SearchResponse response = client.search(searchRequest, RequestOptions.DEFAULT);
-                        sink.success(response);
-                    } catch (IOException e) {
-                        sink.error(e);
-                    }
+                    return client.search(searchRequest, RequestOptions.DEFAULT);
                 })
-                .flatMapIterable(searchResponse -> {
-                    if (!RestStatus.OK.equals(searchResponse.status())) {
-                        String builder = "Error searching products: " +
-                                searchResponse.status().toString();
-
-                        throw new InternalServerError(builder);
-                    }
-
-                    List<ProductIndex> productIndexes = new ArrayList<>();
-                    for (SearchHit hit : searchResponse.getHits()) {
-                        try {
-                            productIndexes.add(objectMapper.readValue(hit.getSourceAsString(), ProductIndex.class));
-                        } catch (JsonProcessingException e) {
-                            throw new RuntimeException(e);
-                        }
-                    }
-
-                    return productIndexes;
-                });
+                .subscribeOn(Schedulers.boundedElastic())
+                .flatMapMany(this::processSearchResponse);
     }
 
     @Override
     public Mono<ProductIndex> findBySku(String sku) {
-        return Mono.<SearchResponse>create(sink -> {
-
-                    BoolQueryBuilder queryBuilder = QueryBuilders.boolQuery();
-                    queryBuilder.filter(QueryBuilders.termQuery("sku.keyword", sku));
+        return Mono.fromCallable(() -> {
+                    BoolQueryBuilder queryBuilder = QueryBuilders.boolQuery()
+                            .filter(QueryBuilders.termQuery("sku.keyword", sku));
 
                     SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
                     searchSourceBuilder.query(queryBuilder);
                     searchSourceBuilder.size(1);
 
-                    SearchRequest searchRequest = new SearchRequest();
+                    SearchRequest searchRequest = new SearchRequest(cfg.getIndexProduct());
                     searchRequest.source(searchSourceBuilder);
 
-                    try {
-                        SearchResponse response = client.search(searchRequest, RequestOptions.DEFAULT);
-                        sink.success(response);
-                    } catch (IOException e) {
-                        sink.error(e);
-                    }
+                    return client.search(searchRequest, RequestOptions.DEFAULT);
                 })
-                .map(this::getHits)
-                .map(searchHits -> searchHits.getAt(0))
-                .map(hit -> JsonUtils.deserialize(hit.getSourceAsString(), ProductIndex.class));
+                .subscribeOn(Schedulers.boundedElastic())
+                .flatMap(this::processSingleHitResponse);
+    }
+
+    private Flux<ProductIndex> processSearchResponse(SearchResponse searchResponse) {
+        return Mono.just(searchResponse)
+                .filter(response -> RestStatus.OK.equals(response.status()))
+                .switchIfEmpty(Mono.error(new InternalServerError("Elasticsearch returned non-OK status: " + searchResponse.status())))
+                .flatMapIterable(filteredSearchResponse -> {
+                    SearchHits hits = filteredSearchResponse.getHits();
+                    return hits == null ? Collections.emptyList() : Arrays.asList(hits.getHits());
+                })
+                .flatMapSequential(hit -> JsonUtils.reactiveDeserialize(hit.getSourceAsString(), ProductIndex.class));
     }
 
     private SearchSourceBuilder buildSearchSource(ProductIndexSearchParamsDTO params) {
@@ -235,20 +213,16 @@ public class ProductIndexElasticsearchImpl implements ProductIndexService {
                 .collect(Collectors.toList());
     }
 
-    private SearchHits getHits(SearchResponse searchResponse) {
-        if (!RestStatus.OK.equals(searchResponse.status())) {
-            String builder = "Error searching products: " +
-                    searchResponse.status().toString();
-
-            throw new InternalServerError(builder);
-        }
-
-
-        if (searchResponse.getHits() == null || Iterables.size(searchResponse.getHits()) < 1) {
-            throw new NotFoundException("No products found");
-        }
-
-        return searchResponse.getHits();
+    private Mono<ProductIndex> processSingleHitResponse(SearchResponse searchResponse) {
+        return Mono.just(searchResponse)
+                .filter(response -> RestStatus.OK.equals(response.status()))
+                .switchIfEmpty(Mono.error(new InternalServerError("Elasticsearch returned non-OK status: " + searchResponse.status())))
+                .map(SearchResponse::getHits)
+                .filter(hits -> hits != null && hits.getHits().length > 0)
+                .map(hits -> hits.getAt(0))
+                .map(SearchHit::getSourceAsString)
+                .flatMap(str -> JsonUtils.reactiveDeserialize(str, ProductIndex.class))
+                .switchIfEmpty(Mono.error(new NotFoundException("Product not found by SKU")));
     }
 
 }

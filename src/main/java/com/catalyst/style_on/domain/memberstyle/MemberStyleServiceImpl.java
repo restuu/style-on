@@ -14,19 +14,18 @@ import com.catalyst.style_on.domain.productindex.dto.ProductIndexSearchParamsDTO
 import com.catalyst.style_on.domain.style.Style;
 import com.catalyst.style_on.domain.style.StyleRepository;
 import com.catalyst.style_on.domain.style.enumeration.*;
-import com.catalyst.style_on.exception.NotFoundException;
-import com.google.common.collect.ImmutableList;
+import com.catalyst.style_on.exception.InternalServerError;
 import com.google.genai.Client;
 import com.google.genai.types.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Mono;
-import reactor.util.function.Tuples;
+import reactor.core.scheduler.Schedulers;
 
-import java.text.MessageFormat;
 import java.time.ZonedDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -125,48 +124,29 @@ public class MemberStyleServiceImpl implements MemberStyleService {
     public Mono<ByteArrayResource> imagineMemberStyle(MemberStyleImagineStyleDTO params) {
 
         return productIndexService.findBySku(params.modelNumber())
-                .map(productIndex -> {
-                    String prompt = "Make attached image wear item from this image "
-                            +buildProductImageUrl(productIndex)
-                            + ", return JPEG file";
-
-                    GenerateContentConfig config = GenerateContentConfig.builder()
-                            .responseModalities("TEXT", "IMAGE")
-                            .build();
-
-                    byte[] imageBytes = new byte[params.image().readableByteCount()];
-                    params.image().read(imageBytes);
-
-                    GenerateContentResponse response = genAi.models.generateContent(
-                            "gemini-2.5-flash-image",
-                            Content.fromParts(
-                                    Part.fromText(prompt),
-                                    Part.fromBytes(imageBytes,"image/jpeg")),
-                            config);
-
-                    ImmutableList<Part> parts = response.parts();
+                .map(this::buildProductImageUrl)
+                .flatMap(imageUrl ->
+                        combineSubmittedImageWithProductImage(params.image(), imageUrl))
+                .flatMap(response -> {
+                    // The parts() method from the GenAI client can return null.
+                    // We must handle this case explicitly.
+                    var parts = response.parts();
                     if (parts == null) {
-                        log.error("Edit image returns null");
-                        throw new RuntimeException("Failed to generate image");
+                        return Mono.error(new InternalServerError("AI response did not contain any parts."));
                     }
 
                     byte[] generatedImage = null;
                     for (Part part : parts) {
-                        if (part.inlineData().isPresent()) {
-                            var blob = part.inlineData().get();
-                            if (blob.data().isPresent()) {
-                                generatedImage = blob.data().get();
-                                break;
-                            }
-                        }
+                        generatedImage = part.inlineData()
+                                .flatMap(Blob::data)
+                                .orElse(null);
+                        if (generatedImage != null) break;
                     }
 
                     if (generatedImage == null) {
-                        log.error("Generated image return no image");
-                        throw  new RuntimeException("Failed to generate image");
+                        return Mono.error(new InternalServerError("Agent did not return an image in the response parts."));
                     }
-
-                    return new ByteArrayResource(generatedImage);
+                    return Mono.just(new ByteArrayResource(generatedImage));
                 });
     }
 
@@ -205,16 +185,37 @@ public class MemberStyleServiceImpl implements MemberStyleService {
     }
 
     private Mono<String> generateStyleName(MemberStyleSummaryDTO summary) {
-        return Mono.create(sink -> {
-            String prompt = """
-                    with examples such as "The Smart Casual" or "The Tech Avant-Garde",
-                    and maximum 30 chars,
-                    please create style name from this weighted parameter:
-                    """ + summary.toString();
-            String name = genAi.models.generateContent(AIModel.GEMINI_2_5_FLASH, prompt, null).text();
+        return Mono.fromCallable(() -> {
+                    String prompt = """
+                            with examples such as "The Smart Casual" or "The Tech Avant-Garde",
+                            and maximum 30 chars,
+                            please create style name from this weighted parameter:
+                            """ + summary.toString();
+                    return genAi.models.generateContent(AIModel.GEMINI_2_5_FLASH, prompt, null).text();
+                })
+                .subscribeOn(Schedulers.boundedElastic());
+    }
 
-            sink.success(name);
-        });
+    private Mono<GenerateContentResponse> combineSubmittedImageWithProductImage(DataBuffer image, String productImageUrl) {
+        return Mono.fromCallable(() -> {
+                    String prompt = "Make attached image wear item from this image "
+                            + productImageUrl
+                            + ", return JPEG file";
 
+                    GenerateContentConfig config = GenerateContentConfig.builder()
+                            .responseModalities("TEXT", "IMAGE")
+                            .build();
+
+                    byte[] imageBytes = new byte[image.readableByteCount()];
+                    image.read(imageBytes);
+
+                    return genAi.models.generateContent(
+                            AIModel.GEMINI_2_5_FLASH_IMAGE,
+                            Content.fromParts(
+                                    Part.fromText(prompt),
+                                    Part.fromBytes(imageBytes, "image/jpeg")),
+                            config);
+                })
+                .subscribeOn(Schedulers.boundedElastic());
     }
 }

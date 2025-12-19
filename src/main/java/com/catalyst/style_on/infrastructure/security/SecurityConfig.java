@@ -32,10 +32,13 @@ public class SecurityConfig {
         return http
                 .authorizeExchange(exchange -> exchange
                         .matchers(new PathPatternParserServerWebExchangeMatcher("/scalar/**")).permitAll()
+                        .matchers(new PathPatternParserServerWebExchangeMatcher("/actuator/**")).permitAll()
+                        .matchers(new PathPatternParserServerWebExchangeMatcher("/healthcheck/**")).permitAll()
                         .matchers(new PathPatternParserServerWebExchangeMatcher("/api-docs")).permitAll()
                         .pathMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
                         .pathMatchers(HttpMethod.POST, "/api/v1/auth/register").permitAll()
                         // Permit all requests for static assets like favicons, manifests, and images
+                        .matchers(new PathPatternParserServerWebExchangeMatcher("/images/**")).permitAll()
                         .pathMatchers(
                                 "/favicon.ico",
                                 "/android-chrome-*.png",

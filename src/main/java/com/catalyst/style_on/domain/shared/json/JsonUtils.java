@@ -1,43 +1,40 @@
 package com.catalyst.style_on.domain.shared.json;
 
+import com.catalyst.style_on.exception.InternalServerError;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.PropertyNamingStrategies;
-import com.fasterxml.jackson.databind.json.JsonMapper;
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 
+@Slf4j
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class JsonUtils {
-    private static ObjectMapper mapper;
 
-    public static ObjectMapper getMapper() {
-        if (mapper == null) {
-            mapper = JsonMapper.builder()
-                    .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
-                    .configure(MapperFeature.ACCEPT_CASE_INSENSITIVE_ENUMS, true)
-                    .propertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE)
-                    .build();
-        }
-        return mapper;
+    private static ObjectMapper objectMapper;
+
+    /**
+     * Initializes the utility class with a Spring-managed ObjectMapper.
+     * This method should only be called once at application startup.
+     */
+    public static void init(ObjectMapper objectMapper) {
+        JsonUtils.objectMapper = objectMapper;
     }
 
     public static <T> Mono<T> reactiveDeserialize(String source, Class<T> clazz) {
-        return Mono.create(sink -> {
-            try {
-                T result = getMapper().readValue(source, clazz);
-                sink.success(result);
-            } catch (JsonProcessingException e) {
-                sink.error(new RuntimeException(e));
-            }
-        });
+        // Use fromCallable to wrap the synchronous call that might throw an exception.
+        // It's more idiomatic for this use case.
+        return Mono.fromCallable(() -> deserialize(source, clazz));
     }
 
     public static <T> T deserialize(String source, Class<T> clazz) {
         try {
-            return getMapper().readValue(source, clazz);
+            return objectMapper.readValue(source, clazz);
         } catch (JsonProcessingException e) {
-            throw new RuntimeException(e);
+            log.error("Failed to deserialize JSON to {}: {}", clazz.getSimpleName(), source, e);
+            // Use your application-specific exception for consistency.
+            throw new InternalServerError("Failed to process data due to deserialization error.", e);
         }
     }
 }
