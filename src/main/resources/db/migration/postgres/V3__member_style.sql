@@ -1,6 +1,8 @@
 drop table if exists member_style_item;
 drop table if exists member_style;
 
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
 create table member_style
 (
 	id         bigserial    not null primary key,
