@@ -25,6 +25,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
+import reactor.util.function.Tuple2;
+import reactor.util.function.Tuples;
 
 import java.time.ZonedDateTime;
 import java.util.*;
@@ -47,8 +49,12 @@ public class MemberStyleServiceImpl implements MemberStyleService {
     public Mono<MemberStyleResponseDTO> submitMemberStyle(Long memberId, MemberStyleSubmitRequestDTO req) {
         return styleRepository.findAllById(req.styleIds())
                 .collectList()
-                .map(this::summarizeSelectedStyles)
-                .zipWhen(this::generateStyleName)
+                .zipWhen(styles -> Mono.just(this.summarizeSelectedStyles(styles)))
+                .map(tuple2 -> {
+                    var name = MemberStyleUtils.generateStyleName(tuple2.getT1(), tuple2.getT2());
+
+                    return Tuples.of(tuple2.getT2(), name);
+                })
                 .flatMap(processed -> {
                     ZonedDateTime now = ZonedDateTime.now();
 
@@ -91,7 +97,7 @@ public class MemberStyleServiceImpl implements MemberStyleService {
                                     MemberStyleProduct memberStyleProduct = new MemberStyleProduct(
                                             null,
                                             savedMemberStyle.id(),
-                                            productIndex.getSku(),
+                                            productIndex.sku(),
                                             i
                                     );
                                     memberStyleProducts.add(memberStyleProduct);
@@ -108,10 +114,10 @@ public class MemberStyleServiceImpl implements MemberStyleService {
                     List<MemberStyleResponseDTO.Product> products = new ArrayList<>();
                     for (ProductIndex productIndex : productIndices) {
                         MemberStyleResponseDTO.Product product = new MemberStyleResponseDTO.Product(
-                                productIndex.getSku(),
-                                productIndex.getName(),
-                                productIndex.getPrice().getPrice(),
-                                productIndex.getPrice().getRetailPrice(),
+                                productIndex.sku(),
+                                productIndex.name(),
+                                productIndex.price().price(),
+                                productIndex.price().retailPrice(),
                                 buildProductImageUrl(productIndex)
                         );
 
@@ -182,9 +188,9 @@ public class MemberStyleServiceImpl implements MemberStyleService {
 
         return host +
                 "/images/product/" +
-                productIndex.getBrandCode() +
+                productIndex.brandCode() +
                 "/" +
-                productIndex.getImages().getJpg();
+                productIndex.images().jpg();
     }
 
     private Mono<String> generateStyleName(MemberStyleSummaryDTO summary) {
