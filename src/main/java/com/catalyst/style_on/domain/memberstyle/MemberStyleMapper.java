@@ -7,10 +7,13 @@ import com.catalyst.style_on.domain.style.enumeration.StyleColorEnum;
 import com.catalyst.style_on.domain.style.enumeration.StyleEnum;
 import com.catalyst.style_on.domain.style.enumeration.StyleMovementEnum;
 import com.catalyst.style_on.domain.style.enumeration.StyleStrapMaterialEnum;
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 
 import java.util.Map;
 import java.util.stream.Collectors;
 
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class MemberStyleMapper {
     public static ProductIndexSearchParamsDTO memberStyleSummaryDTOToProductIndexSearchParamsDTO(MemberStyleSummaryDTO summary) {
         Map<Integer, Integer> keyStyle =   summary.getKeyStyle()

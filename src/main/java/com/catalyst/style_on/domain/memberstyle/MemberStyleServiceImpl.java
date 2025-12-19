@@ -91,7 +91,7 @@ public class MemberStyleServiceImpl implements MemberStyleService {
                                     MemberStyleProduct memberStyleProduct = new MemberStyleProduct(
                                             null,
                                             savedMemberStyle.id(),
-                                            productIndex.sku(),
+                                            productIndex.getSku(),
                                             i
                                     );
                                     memberStyleProducts.add(memberStyleProduct);
@@ -108,7 +108,10 @@ public class MemberStyleServiceImpl implements MemberStyleService {
                     List<MemberStyleResponseDTO.Product> products = new ArrayList<>();
                     for (ProductIndex productIndex : productIndices) {
                         MemberStyleResponseDTO.Product product = new MemberStyleResponseDTO.Product(
-                                productIndex.sku(),
+                                productIndex.getSku(),
+                                productIndex.getName(),
+                                productIndex.getPrice().getPrice(),
+                                productIndex.getPrice().getRetailPrice(),
                                 buildProductImageUrl(productIndex)
                         );
 
@@ -179,9 +182,9 @@ public class MemberStyleServiceImpl implements MemberStyleService {
 
         return host +
                 "/images/product/" +
-                productIndex.brandCode() +
+                productIndex.getBrandCode() +
                 "/" +
-                productIndex.images().jpg();
+                productIndex.getImages().getJpg();
     }
 
     private Mono<String> generateStyleName(MemberStyleSummaryDTO summary) {

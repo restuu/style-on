@@ -51,10 +51,12 @@ public class ProductIndexElasticsearchImpl implements ProductIndexService {
     private static final String COLOR_FIELD = "color.keyword";
 
     private static final String[] SOURCE_INCLUDE_FIELDS = List.of(
+            "id",
             "sku",
             "name",
             "images",
-            "brand_code"
+            "brand_code",
+            "price"
     ).toArray(String[]::new);
 
     private final ElasticsearchConfig cfg;
