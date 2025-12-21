@@ -6,6 +6,7 @@ import java.util.List;
 public record MemberStyleResponseDTO(
         Long id,
         String styleName,
+        String styleDescription,
         List<Product> products
 ) {
     public record Product(

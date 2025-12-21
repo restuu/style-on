@@ -191,11 +191,11 @@ public class ProductIndexElasticsearchImpl implements ProductIndexService {
         BigDecimal min = price.min();
         BigDecimal max = price.max();
 
-        if (min.compareTo(BigDecimal.ZERO) > 0) {
+        if (min != null && min.compareTo(BigDecimal.ZERO) > 0) {
             range = range.gte(min);
         }
 
-        if (max.compareTo(BigDecimal.ZERO) > 0) {
+        if (max != null && max.compareTo(BigDecimal.ZERO) > 0) {
             range = range.lte(max);
         }
 

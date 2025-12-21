@@ -1,6 +1,7 @@
 package com.catalyst.style_on.domain.memberstyle;
 
 import com.catalyst.style_on.domain.ai.AIModel;
+import com.catalyst.style_on.domain.downloader.Downloader;
 import com.catalyst.style_on.domain.memberstyle.dto.MemberStyleImagineStyleDTO;
 import com.catalyst.style_on.domain.memberstyle.dto.MemberStyleResponseDTO;
 import com.catalyst.style_on.domain.memberstyle.dto.MemberStyleSubmitRequestDTO;
@@ -19,10 +20,13 @@ import com.google.genai.Client;
 import com.google.genai.types.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.buffer.DataBuffer;
+import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import reactor.util.function.Tuple2;
@@ -44,6 +48,7 @@ public class MemberStyleServiceImpl implements MemberStyleService {
     private final StyleRepository styleRepository;
     private final ProductIndexService productIndexService;
     private final Client genAi;
+    private final Downloader downloader;
 
     @Override
     @Transactional
@@ -51,24 +56,40 @@ public class MemberStyleServiceImpl implements MemberStyleService {
         return styleRepository.findAllById(req.styleIds())
                 .collectList()
                 .zipWhen(styles -> Mono.just(this.summarizeSelectedStyles(styles)))
-                .map(tuple2 -> {
-                    var name = MemberStyleUtils.generateStyleName(tuple2.getT1(), tuple2.getT2());
+                .flatMap(tuple2 -> {
+                    var summary = tuple2.getT2();
+                    var styles = tuple2.getT1();
 
-                    return Tuples.of(tuple2.getT2(), name);
-                })
-                .flatMap(processed -> {
-                    ZonedDateTime now = ZonedDateTime.now();
+                    var nameMono = MemberStyleUtils.generateStyleName(styles, summary)
+                            .map(Mono::just)
+                            .orElseGet(() -> generateStyleName(summary)
+                                    .doOnNext(generatedName -> log.info("AI generated name: {}", generatedName)));
 
-                    MemberStyle memberStyle = new MemberStyle(
-                            null,
-                            memberId,
-                            processed.getT2(),
-                            processed.getT1(),
-                            now,
-                            now
-                    );
+                    var descriptionMono = MemberStyleUtils.generateStyleDescription(styles, summary)
+                            .map(Mono::just)
+                            .orElseGet(() -> generateStyleDescription(summary)
+                                    .doOnNext(generatedDescription -> log.info("AI generated description: {}", generatedDescription)));
 
-                    return memberStyleRepository.save(memberStyle);
+
+                    return Mono.zip(nameMono, descriptionMono)
+                            .flatMap(nameAndDescription -> {
+                                var name = nameAndDescription.getT1();
+                                var description = nameAndDescription.getT2();
+
+                                var now = ZonedDateTime.now();
+
+                                MemberStyle memberStyle = new MemberStyle(
+                                        null,
+                                        memberId,
+                                        name,
+                                        description,
+                                        summary,
+                                        now,
+                                        now
+                                );
+
+                                return memberStyleRepository.save(memberStyle);
+                            });
                 })
                 .flatMap(savedMemberStyle -> {
                     Set<MemberStyleItem> items = req.styleIds().stream()
@@ -125,7 +146,10 @@ public class MemberStyleServiceImpl implements MemberStyleService {
                         products.add(product);
                     }
 
-                    return new MemberStyleResponseDTO(memberStyle.id(), memberStyle.name(), products);
+                    return new MemberStyleResponseDTO(memberStyle.id(),
+                            memberStyle.name(),
+                            memberStyle.description(),
+                            products);
                 });
 
     }
@@ -135,8 +159,9 @@ public class MemberStyleServiceImpl implements MemberStyleService {
 
         return productIndexService.findBySku(params.modelNumber())
                 .map(this::buildProductImageUrl)
-                .flatMap(imageUrl ->
-                        combineSubmittedImageWithProductImage(params.image(), imageUrl))
+                .flatMap(downloader::downloadToMemory)
+                .flatMap(imageBuffer ->
+                        combineSubmittedImageWithProductImage(params.image(), imageBuffer))
                 .flatMap(response -> {
                     // The parts() method from the GenAI client can return null.
                     // We must handle this case explicitly.
@@ -195,22 +220,64 @@ public class MemberStyleServiceImpl implements MemberStyleService {
     }
 
     private Mono<String> generateStyleName(MemberStyleSummaryDTO summary) {
-        return Mono.fromCallable(() -> {
-                    String prompt = """
-                            with examples such as "The Smart Casual" or "The Tech Avant-Garde",
-                            and maximum 30 chars,
-                            please create style name from this weighted parameter:
-                            """ + summary.toString();
-                    return genAi.models.generateContent(AIModel.GEMINI_2_5_FLASH, prompt, null).text();
-                })
+        String prompt = """
+                With examples such as:
+                
+                %s
+                
+                and this weighed parameter: %s
+                
+                Please create 1 style name with length not longer than 50 char without any special characters.
+                Return only the style name since I will save this generated text directly to database.
+                """
+                .formatted(
+                        StringUtils.join(MemberStyleUtils.listAvailableNames(), "\n"),
+                        summary.toString()
+                );
+
+        log.info("Generating style name with prompt: {}", prompt);
+
+        return Mono.fromCallable(() -> genAi.models
+                        .generateContent(AIModel.GEMINI_2_5_FLASH, prompt, GenerateContentConfig.builder()
+                                .httpOptions(HttpOptions.builder()
+                                        .timeout(15 * 1000)
+                                        .build())
+                                .build())
+                        .text())
                 .subscribeOn(Schedulers.boundedElastic());
     }
 
-    private Mono<GenerateContentResponse> combineSubmittedImageWithProductImage(DataBuffer image, String productImageUrl) {
+    private Mono<String> generateStyleDescription(MemberStyleSummaryDTO summary) {
+        String prompt = """
+                With examples such as:
+                
+                %s
+                
+                and this weighed parameter: %s
+                
+                Please create style description with length not longer than 200 char.
+                Return only the style description since I will save this generated text directly to database.
+                """
+                .formatted(
+                        StringUtils.join(MemberStyleUtils.listAvailableDescriptions(), "\n"),
+                        summary.toString()
+                );
+
+        log.info("Generating style description with prompt: {}", prompt);
+
+        return Mono.fromCallable(() -> genAi.models
+                        .generateContent(AIModel.GEMINI_2_5_FLASH, prompt,
+                                GenerateContentConfig.builder()
+                                        .httpOptions(HttpOptions.builder()
+                                                .timeout(15 * 1000)
+                                                .build())
+                                        .build())
+                        .text())
+                .subscribeOn(Schedulers.boundedElastic());
+    }
+
+    private Mono<GenerateContentResponse> combineSubmittedImageWithProductImage(DataBuffer image, DataBuffer productImage) {
         return Mono.fromCallable(() -> {
-                    String prompt = "Make attached image wear item from this image "
-                            + productImageUrl
-                            + ", return JPEG file";
 
                     GenerateContentConfig config = GenerateContentConfig.builder()
                             .responseModalities("TEXT", "IMAGE")
@@ -222,12 +289,28 @@ public class MemberStyleServiceImpl implements MemberStyleService {
                     byte[] imageBytes = new byte[image.readableByteCount()];
                     image.read(imageBytes);
 
-                    return genAi.models.generateContent(
-                            AIModel.GEMINI_2_5_FLASH_IMAGE,
+                    byte[] productImageBytes = new byte[productImage.readableByteCount()];
+                    productImage.read(productImageBytes);
+
+                    String specializedPrompt = """
+                            Perform a Virtual Try-On.
+                            Input 1 (Person/Wrist): [image1]
+                            Input 2 (Garment): [image2]
+                            Task: Generate a photorealistic image of the person wearing the garment.
+                            Output: Image only.
+                            """;
+
+                    GenerateContentResponse response = genAi.models.generateContent(
+                            AIModel.GEMINI_2_5_FLASH_IMAGE, // Only if this specific model version confirms VTO support
                             Content.fromParts(
-                                    Part.fromText(prompt),
-                                    Part.fromBytes(imageBytes, "image/jpeg")),
-                            config);
+                                    Part.fromText(specializedPrompt),
+                                    Part.fromBytes(imageBytes, "image/jpeg"),   // Explicitly handle order
+                                    Part.fromBytes(productImageBytes, "image/jpeg")
+                            ),
+                            config
+                    );
+
+                    return response;
                 })
                 .subscribeOn(Schedulers.boundedElastic());
     }

@@ -14,6 +14,7 @@ public record MemberStyle(
         @Id Long id,
         Long memberId,
         String name,
+        String description,
         MemberStyleSummaryDTO summary,
         ZonedDateTime createdAt,
         ZonedDateTime updatedAt
