@@ -28,6 +28,7 @@ import reactor.core.scheduler.Schedulers;
 import reactor.util.function.Tuple2;
 import reactor.util.function.Tuples;
 
+import java.time.Duration;
 import java.time.ZonedDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -213,6 +214,9 @@ public class MemberStyleServiceImpl implements MemberStyleService {
 
                     GenerateContentConfig config = GenerateContentConfig.builder()
                             .responseModalities("TEXT", "IMAGE")
+                            .httpOptions(HttpOptions.builder()
+                                    .timeout(15 * 1000) // 15 seconds
+                                    .build())
                             .build();
 
                     byte[] imageBytes = new byte[image.readableByteCount()];
